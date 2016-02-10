@@ -1,3 +1,8 @@
+# Csv files (they might be very large)
+*.csv
+*.pdf
+*.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -20,6 +25,7 @@ lib64/
 parts/
 sdist/
 var/
+data/
 *.egg-info/
 .installed.cfg
 *.egg
