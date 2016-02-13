@@ -9,7 +9,7 @@ from prepare import filter_by_cluster
 def yandex_speller(texts):
     res = []
     for i in range(0, len(texts), 5):
-        print("Speller progress: {}/{}".format(i, len(texts)), end='\r')
+        print("Speller progress: {}/{}".format(i+5, len(texts)), end='\r')
         params = {'text': texts[i:i+5], 'lang': 'ru'}
         resp = requests.get('http://speller.yandex.net/services/spellservice.json/checkTexts', params=params)
         res += json.loads(resp.text)
@@ -56,6 +56,7 @@ def main():
         with open(args.log, "w", encoding="utf-8") as f:
             f.write(log)
     data.to_csv(args.output, sep=';', header=None)
+    print("\nDone.")
 
 if __name__ == "__main__":
     main()
