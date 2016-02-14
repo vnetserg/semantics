@@ -8,10 +8,54 @@ import numpy as np
 from itertools import combinations
 from subprocess import Popen, PIPE
 
+'''
+    Модуль, осуществляющий преобразование сырых текстов
+    в матрицу признаков.
+
+    Использование:
+        prepare.py INFILE -o OUTFILE
+
+        INFILE - csv-файл со значениями, разделёнными точкой с запятой,
+            и без заголовка;
+        OUTFILE - имя файла, в который записать матрицу признаков.
+
+    Дополнительные флаги:
+        -n NUMBER - обработать только первые NUMBER сообщений;
+        -s NUMBER - разделить реультат на два файла, в первый поместить
+            NUMBER строк, во второй все остальные;
+        -r SEED - случайно перемешать строки входного файла, использовав
+            SEED в качестве семени генератора псевдослучайных чисел.
+'''
+
 MYSTEM_GRAMMEMS = ["NAME", "A", "ADV", "ADVPRO", "ANUM", "APRO", "COM",
     "CONJ", "INTJ", "NUM", "PART", "PR", "S", "SPRO", "V"]
 
+def choose_with_cluster(data, num):
+    '''
+        Выбрать из входных данных ровно num сообщений,
+        при этом сообщения выбираются целыми кластерами.
+        Аргументы:
+            data - DataFrame с исходными сообщениями;
+            num - количество сообщений, которое надо выбрать.
+        Возвращает: DataFrame с выбранными сообщениями.
+    '''
+    data = filter_by_cluster(data)
+    result = []
+    ln = 0
+    for cluster in data["cluster"].unique():
+        result.append(data[data["cluster"] == cluster])
+        ln += len(result[-1])
+        if ln > num:
+            return ps.concat(result)[:num]
+
 def filter_by_cluster(data):
+    '''
+        Отфильтровать сообщения, оставив лишь принадлежащие
+        непустым кластерам. Параметры:
+            data - DataFrame с сообщениями;
+        Аргументы: DataFrame с сообщениями, у каждого из которых
+        в кластере есть как минимум одно другое сообщение.
+    '''
     data = data[data["cluster"] != "-"]
     count = {}
     for cluster in data["cluster"]:
@@ -20,6 +64,12 @@ def filter_by_cluster(data):
     return data[data["cluster"].isin(allow)]
 
 def levenstein_distance(a, b):
+    '''
+        Вернуть расстояние Левенштейна между строками a и b.
+        Аргументы:
+            a, b - строки;
+        Возвращает: целое число - расстояние Левенштейна.
+    '''
     n, m = len(a), len(b)
     if n > m:
         a, b = b, a
@@ -35,8 +85,18 @@ def levenstein_distance(a, b):
     return current_row[n]
 
 def mystem_parse(texts):
+    '''
+        Прогнать список текстов через mystem, вернув для каждого слова
+        его нормальную форму и граммему.
+        Аргументы:
+            texts - список строковых значений;
+        Возвращает: список наборов, где каждый набор соответствует
+        входному тексту и содержит кортежи (нормальная форма, граммема)
+    '''
     result = []
-    text = "\n#!#DEADBEEF#!#\n".join(texts)
+    # В качестве разделителя сообщений используем волшебное слово.
+    # Грязно, но работает:
+    text = "\nDEADBEEF\n".join(texts)
 
     print("Calling mystem...", end=' ')
     sys.stdout.flush()
@@ -51,6 +111,8 @@ def mystem_parse(texts):
             msg = set()
             continue
         if line[-1] == '?':
+            # Если mystem не опознал слово, трактуем его
+            # как имя собственное:
             norm = line.strip('?')
             lemma = "NAME"
         else:
@@ -69,7 +131,12 @@ def mystem_parse(texts):
     return result
 
 def prepare(data):
-    data = filter_by_cluster(data)
+    '''
+        Составить матрицу признаков для данных сообщений.
+        Аргументы:
+            data - DataFrame с исходными сообщениями.
+        Возвращает: DataFrame - матрицу признаков.
+    '''
     cluster_nums = {cluster: i for i, cluster
                     in enumerate(data["cluster"].unique())}
     messages = [{"id": ind, "text": row["text"],
@@ -81,7 +148,7 @@ def prepare(data):
         mes["tokens"] = tok
     rows = []
     for i, (m1, m2) in enumerate(combinations(messages, 2)):
-        print("Combinations progress: {}/{}".format(i+1,
+        print("Прогресс в сочетаниях: {}/{}".format(i+1,
             len(messages)*(len(messages)-1)//2), end='\r')
         row = {'id1': m1['id'], 'id2': m2['id'],
             'similar': int(m1["cluster"] == m2["cluster"])}
@@ -93,12 +160,22 @@ def prepare(data):
         + ["semantic_repeats", "similar"])
 
 def texts_comparison(t1, t2):
+    '''
+        Осуществить сравнение двух текстов и составить одну
+        сроку признаков.
+        Аргументы:
+            t1, t2 - словари, у которых ключ 'tokens' - это набор
+                кортежей (нормальная форма слова, граммема слова)
+        Возвращает: словарь с результатом сравнения данных текстов
+    '''
     result = {}
 
+    # Ищем явные повторы:
     common = t1["tokens"] & t2["tokens"]
     for norm, lemma in common:
         result[lemma] = result.get(lemma, 0) + 1
 
+    # Ищем неявные повторы:
     graph = nx.Graph()
     tokens_left = t1["tokens"] - common
     tokens_right = t2["tokens"] - common
@@ -130,7 +207,7 @@ def main():
         data = data.iloc[np.random.permutation(len(data))]
 
     if args.number > 0:
-        data = data[:args.number]
+        data = choose_with_cluster(data, args.number)
 
     if args.split > 0:
         chunks = [data[:args.split], data[args.split:]]
