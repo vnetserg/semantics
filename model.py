@@ -5,7 +5,7 @@ import argparse, sys, pickle
 import pandas as ps
 import numpy as np
 
-from sklearn.cross_validation import KFold, cross_val_score
+from sklearn.metrics import classification_report
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -65,8 +65,8 @@ def compete_models(train, test, seed = None):
     '''
         Осуществить оценку моделей по 4 показателям:
             - Общая точность
-            - Процент true positives от всех positives
-            - Процент true negatives от всех negatives
+            - Процент верно предсказанных 0
+            - Процент верно предсказанных 1
             - Среднее арифметическое двух предыдущих значений
         Аргументы:
             train - DataFrame с обучающей выборкой
@@ -150,7 +150,9 @@ def train_model(data, seed = None):
     
     # Обучить модель:
     model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
+    #model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
     model.fit(X, y)
+    #print(X.columns, '\n', model.feature_importances_)
     return model
 
 def validate_model(model, data):
@@ -167,17 +169,23 @@ def validate_model(model, data):
     X = data.drop(["id1", "id2", "similar"], axis=1)
     y = data["similar"]
     p = model.predict(X)
-
-    # Оценить производительность модели по 3 показателям:
-    score = (p == y).mean()
     res = ps.DataFrame({"y": y, "p": p}, index=None)
-    true_pos = res[res["y"] == 1]["p"].mean()
-    true_neg = 1 - res[res["y"] == 0]["p"].mean()
+
+    # Оценить производительность модели:
+    score = (p == y).mean()
+    report = classification_report(y, p)
+    p_vs_o = ps.DataFrame({"predicted 0": [
+            len(res[(res["p"] == 0) & (res["y"] == 0)]),
+            len(res[(res["p"] == 0) & (res["y"] == 1)]),
+        ],
+        "predicted 1": [
+            len(res[(res["p"] == 1) & (res["y"] == 0)]),
+            len(res[(res["p"] == 1) & (res["y"] == 1)]),
+        ]}, index=["observed 0", "observed 1"])
 
     print("Размер тестовой выборки: {}".format(len(data)))
-    print("Общая точность: {}".format(score))
-    print("Способность распознавать дубликаты: {}".format(true_pos))
-    print("Способность отличать не-дубликаты: {}".format(true_neg))
+    print("\nОбщая точность: {}".format(score))
+    print('\n', report, '\n', p_vs_o)
 
 def predict_values(model, data):
     '''
@@ -229,7 +237,7 @@ def main():
         return print("Не указано, откуда брать модель (ключи -i, -t, -c)")
 
     if not (args.validate or args.predict or args.output):
-        return print("Не указано, что делать с моделью (ключи -v, -p, -o)")
+        return print("Не указано, что делать с моделью (ключи -v, -p, -o, -c)")
 
     if args.validate:
         print("Читаю тестовые данные...", end=' ')
