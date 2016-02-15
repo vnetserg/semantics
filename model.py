@@ -119,8 +119,8 @@ def compete_models(train, test, seed = None):
     bal = max(models, key=lambda x: (x["true_pos"]+x["true_neg"])/2)
 
     print("Лучший общий результат: {} ({})".format(sc["txt"], sc["score"]))
-    print("Лучший по true positives: {} ({})".format(pos["txt"], pos["true_pos"]))
-    print("Лучший по true negatives: {} ({})".format(neg["txt"], neg["true_neg"]))
+    print("Лучший по определению дубликатов: {} ({})".format(pos["txt"], pos["true_pos"]))
+    print("Лучший по определению не-дубликатов: {} ({})".format(neg["txt"], neg["true_neg"]))
     print("Лучшее среднее: {} ({}/{})".format(bal["txt"], bal["true_pos"], bal["true_neg"]))
 
 def train_model(data, seed = None):
@@ -175,9 +175,9 @@ def validate_model(model, data):
     true_neg = 1 - res[res["y"] == 0]["p"].mean()
 
     print("Размер тестовой выборки: {}".format(len(data)))
-    print("Попадания: {}".format(score))
-    print("True positives: {}".format(true_pos))
-    print("True negatives: {}".format(true_neg))
+    print("Общая точность: {}".format(score))
+    print("Способность распознавать дубликаты: {}".format(true_pos))
+    print("Способность отличать не-дубликаты: {}".format(true_neg))
 
 def predict_values(model, data):
     '''
