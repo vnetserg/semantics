@@ -144,13 +144,16 @@ def train_model(data, seed = None):
     data = ps.concat([pos_data, neg_data])
     print("Размер учебной выборки: {}".format(len(data)))
 
+    print(sorted(((ind, val) for ind, val
+        in data.cov()["similar"].iteritems()), key = lambda x: x[1]))
+
     # Выделить данные и значения целевой функции:
     X = data.drop(["id1", "id2", "similar"], axis=1)
     y = data["similar"]
     
     # Обучить модель:
-    model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
-    #model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
+    #model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
+    model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
     model.fit(X, y)
     #print(X.columns, '\n', model.feature_importances_)
     return model

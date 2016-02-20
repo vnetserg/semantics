@@ -130,7 +130,7 @@ def mystem_parse(texts):
     result.append(msg)
     return result
 
-def prepare(data):
+def prepare(data, titles = False):
     '''
         Составить матрицу признаков для данных сообщений.
         Аргументы:
@@ -139,9 +139,10 @@ def prepare(data):
     '''
     cluster_nums = {cluster: i for i, cluster
                     in enumerate(data["cluster"].unique())}
-    messages = [{"id": ind, "text": row["text"],
-                 "cluster": cluster_nums[row["cluster"]]}
-                for ind, row in data.iterrows()]
+    messages = [{"id": ind,
+        "text": ((row["title"]+" ") if titles else "") + row["text"],
+        "cluster": cluster_nums[row["cluster"]]}
+        for ind, row in data.iterrows()]
     tokens = mystem_parse([m["text"] for m in messages])
     assert len(tokens) == len(messages)
     for mes, tok in zip(messages, tokens):
@@ -196,6 +197,7 @@ def main():
         metavar="NUMBER", default=0, type=int)
     parser.add_argument("-n", "--number", help="number of rows to process",
         metavar="NUMBER", default=0, type=int)
+    parser.add_argument("-t", "--title", help="учитывать заголовок тоже", action="store_true")
     parser.add_argument("-r", "--random", help="семя генератора псевдослучайных чисел", metavar="SEED", type=int)
     args = parser.parse_args()
 
@@ -215,7 +217,7 @@ def main():
         chunks = [data]
 
     for chunk in chunks:
-        prep = prepare(chunk)
+        prep = prepare(chunk, args.title)
         if args.split > 0:
             dot = args.output.rfind(".")
             filename = args.output[:dot] + "-s" + str(len(chunk)) \
