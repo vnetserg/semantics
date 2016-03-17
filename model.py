@@ -2,8 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import argparse, sys, pickle
+from itertools import combinations
 import pandas as ps
 import numpy as np
+import networkx as nx
+import matplotlib
+import matplotlib.pyplot as plt
 
 from sklearn.metrics import classification_report
 
@@ -30,6 +34,44 @@ from sklearn.svm import SVC
     Пример использования:
         model.py -t prepared-500-s300.csv -v prepared-500-s700.csv
 '''
+
+def draw_plots(data, seed = None):
+    # Перемешать выборку:
+    if seed is not None:
+        np.random.seed(seed)
+        data = data.iloc[np.random.permutation(len(data))]
+
+    # Выбрать все записи, значение целевой функции которых равно 1,
+    # и ровно столько же записей со значением целевой функции 0:
+    pos_data = data[data["similar"] == 1.0]
+    neg_data = data[data["similar"] == 0.0][:len(pos_data)]
+    data = ps.concat([pos_data, neg_data])
+
+    features = ["S", "NAME"]
+    d0 = data[data["similar"] == 0]
+    d1 = data[data["similar"] == 1]
+    for f1, f2 in combinations(features, 2):
+        plt.xlabel(f1)
+        plt.ylabel(f2)
+        plt.scatter(d0[f1], d0[f2], color="red", alpha=0.25)
+        plt.scatter(d1[f1], d1[f2], color="green", alpha=0.25)
+        plt.show()
+
+def draw_graph(data):
+    graph = nx.Graph()
+    ids = set()
+    for ind, row in data.iterrows():
+        ids.add(row["id1"])
+        ids.add(row["id2"])
+    nums = {id: i for i, id in enumerate(sorted(ids))}
+    for ind, row in data.iterrows():
+        id1, id2 = nums[row["id1"]], nums[row["id2"]]
+        graph.add_node(id1)
+        graph.add_node(id2)
+        if row["similar"]:
+            graph.add_edge(id1, id2)
+    nx.draw_networkx(graph)
+    plt.show()
 
 def all_models(seed = None):
     '''
@@ -144,21 +186,21 @@ def train_model(data, seed = None):
     data = ps.concat([pos_data, neg_data])
     print("Размер учебной выборки: {}".format(len(data)))
 
-    print(sorted(((ind, val) for ind, val
-        in data.cov()["similar"].iteritems()), key = lambda x: x[1]))
+    #print(sorted(((ind, val) for ind, val
+    #    in data.cov()["similar"].iteritems()), key = lambda x: x[1]))
 
     # Выделить данные и значения целевой функции:
     X = data.drop(["id1", "id2", "similar"], axis=1)
     y = data["similar"]
     
     # Обучить модель:
-    #model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
-    model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
+    model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
+    #model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
     model.fit(X, y)
     #print(X.columns, '\n', model.feature_importances_)
     return model
 
-def validate_model(model, data):
+def validate_model(model, data, visualize):
     '''
         Проверить производительность модели на выборке.
         Аргументы:
@@ -173,6 +215,12 @@ def validate_model(model, data):
     y = data["similar"]
     p = model.predict(X)
     res = ps.DataFrame({"y": y, "p": p}, index=None)
+
+    # Визуализировать графы:
+    if visualize:
+        ids = ps.DataFrame({"id1": data["id1"], "id2": data["id2"]})
+        draw_graph(ps.concat([ids, ps.DataFrame({"similar": y})], axis=1))
+        draw_graph(ps.concat([ids, ps.DataFrame({"similar": p})], axis=1))
 
     # Оценить производительность модели:
     score = (p == y).mean()
@@ -214,9 +262,18 @@ def main():
     parser.add_argument("-c", "--compete", help="проверить производительность моделей", nargs=2, metavar=("TRAIN", "TEST"))
     parser.add_argument("-o", "--output", help="записать модель в файл", metavar="FILE")
     parser.add_argument("-v", "--validate", help="проверить производительность модели на выборке", metavar="FILE")
+    parser.add_argument("-g", "--graph", help="визуализировать графы (работает только с -v)", action="store_true")
+    parser.add_argument("-d", "--draw", help="нарисовать графики для данных", metavar="FILE")
     parser.add_argument("-p", "--predict", help="предсказать значения для выборки", nargs=2, metavar=("INFILE", "OUTFILE"))
     parser.add_argument("-r", "--random", help="семя генератора псевдослучайных чисел", metavar="SEED", type=int)
     args = parser.parse_args()
+
+    if args.draw:
+        print("Читаю обучающую выборку...", end=' ')
+        sys.stdout.flush()
+        data = ps.read_csv(args.draw)
+        print("ОК.")
+        draw_plots(data, args.random)
 
     if args.input:
         model = pickle.load(open(args.input, "rb"))
@@ -247,7 +304,7 @@ def main():
         sys.stdout.flush()
         test = ps.read_csv(args.validate)
         print("ОК.")
-        validate_model(model, test)
+        validate_model(model, test, args.graph)
 
     if args.predict:
         infile, outfile = args.predict

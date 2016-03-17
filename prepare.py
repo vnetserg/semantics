@@ -3,10 +3,11 @@
 
 import argparse, sys
 import pandas as ps
-import networkx as nx
 import numpy as np
 from itertools import combinations
 from subprocess import Popen, PIPE
+
+from porter import Porter
 
 '''
     Модуль, осуществляющий преобразование сырых текстов
@@ -130,7 +131,7 @@ def mystem_parse(texts):
     result.append(msg)
     return result
 
-def prepare(data, titles = False):
+def prepare(data, titles = False, porter = False):
     '''
         Составить матрицу признаков для данных сообщений.
         Аргументы:
@@ -147,6 +148,8 @@ def prepare(data, titles = False):
     assert len(tokens) == len(messages)
     for mes, tok in zip(messages, tokens):
         mes["tokens"] = tok
+        if porter:
+            mes["lemmas"] = set(Porter.stem(w) for w in mes["text"])
     rows = []
     for i, (m1, m2) in enumerate(combinations(messages, 2)):
         print("Прогресс в сочетаниях: {}/{}".format(i+1,
@@ -163,7 +166,7 @@ def prepare(data, titles = False):
 def texts_comparison(t1, t2):
     '''
         Осуществить сравнение двух текстов и составить одну
-        сроку признаков.
+        строку признаков.
         Аргументы:
             t1, t2 - словари, у которых ключ 'tokens' - это набор
                 кортежей (нормальная форма слова, граммема слова)
@@ -173,19 +176,24 @@ def texts_comparison(t1, t2):
 
     # Ищем явные повторы:
     common = t1["tokens"] & t2["tokens"]
-    for norm, lemma in common:
-        result[lemma] = result.get(lemma, 0) + 1
+    for norm, grammema in common:
+        result[grammema] = result.get(grammema, 0) + 1
 
     # Ищем неявные повторы:
-    graph = nx.Graph()
-    tokens_left = t1["tokens"] - common
-    tokens_right = t2["tokens"] - common
-    for w1, l1 in tokens_left:
-        for w2, l2 in tokens_right:
-            if levenstein_distance(w1, w2) < max((len(w1), len(w2)))//2:
-                graph.add_edge(w1, w2)
-    result["semantic_repeats"] = len(nx.maximal_matching(graph))
-
+    if "lemmas" in t1:
+        # Если есть леммы - значит, использован алгоритм Портера
+        result["semantic_repeats"] = len(t1["lemmas"] & t2["lemmas"]) - len(common)
+    else:
+        tokens_left = t1["tokens"] - common
+        tokens_right = t2["tokens"] - common
+        left_matches, right_matches = set(), set()
+        for w1, l1 in tokens_left:
+            for w2, l2 in tokens_right:
+                if levenstein_distance(w1, w2) < max((len(w1), len(w2)))//2:
+                    left_matches.add(w1)
+                    right_matches.add(w2)
+        result["semantic_repeats"] = min((len(left_matches), len(right_matches)))
+    
     return result
 
 def main():
@@ -197,7 +205,8 @@ def main():
         metavar="NUMBER", default=0, type=int)
     parser.add_argument("-n", "--number", help="number of rows to process",
         metavar="NUMBER", default=0, type=int)
-    parser.add_argument("-t", "--title", help="учитывать заголовок тоже", action="store_true")
+    parser.add_argument("-t", "--title", help="конкатенировать заголовок", action="store_true")
+    parser.add_argument("-p", "--porter", help="использовать стеммер Портера", action="store_true")
     parser.add_argument("-r", "--random", help="семя генератора псевдослучайных чисел", metavar="SEED", type=int)
     args = parser.parse_args()
 
@@ -217,7 +226,7 @@ def main():
         chunks = [data]
 
     for chunk in chunks:
-        prep = prepare(chunk, args.title)
+        prep = prepare(chunk, args.title, args.porter)
         if args.split > 0:
             dot = args.output.rfind(".")
             filename = args.output[:dot] + "-s" + str(len(chunk)) \
