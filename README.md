@@ -80,6 +80,6 @@
 
 ```
 speller.py 120k-utf8.csv -o spelled-f.csv -l log.txt -f
-prepare.py spelled-f.csv -o prepared-1000.csv -n 1000 -s 300 -r 42
+prepare.py spelled-f.csv -o prepared-1000.csv -n 1000 -s 300 -t -r 42
 model.py -t prepared-1000-s300.csv -v prepared-1000-s700.csv -o model.mdl -r 42
 ```
