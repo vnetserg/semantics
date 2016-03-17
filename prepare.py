@@ -12,14 +12,11 @@ from porter import Porter
 '''
     Модуль, осуществляющий преобразование сырых текстов
     в матрицу признаков.
-
     Использование:
         prepare.py INFILE -o OUTFILE
-
         INFILE - csv-файл со значениями, разделёнными точкой с запятой,
             и без заголовка;
         OUTFILE - имя файла, в который записать матрицу признаков.
-
     Дополнительные флаги:
         -n NUMBER - обработать только первые NUMBER сообщений;
         -s NUMBER - разделить реультат на два файла, в первый поместить
@@ -114,20 +111,21 @@ def mystem_parse(texts):
         if line[-1] == '?':
             # Если mystem не опознал слово, трактуем его
             # как имя собственное:
-            norm = line.strip('?')
-            lemma = "NAME"
+            norm = line
+            gramm = "NAME"
         else:
             norm = line[:line.find("=")]
-            lemma = None
+            gramm = None
             line = line.split("|")[0][line.find("=")+1:]
             for trait in ("гео", "имя", "фам", "отч"):
                 if trait in line:
-                    lemma = "NAME"
+                    gramm = "NAME"
                     break
-            if lemma is None:
-                lemma = line.split('=')[0].split(',')[0]
-        assert lemma in MYSTEM_GRAMMEMS
-        msg.add((norm, lemma))
+            if gramm is None:
+                gramm = line.split('=')[0].split(',')[0]
+        assert gramm in MYSTEM_GRAMMEMS
+        norm = norm.strip('?')
+        msg.add((norm, gramm))
     result.append(msg)
     return result
 
@@ -149,7 +147,7 @@ def prepare(data, titles = False, porter = False):
     for mes, tok in zip(messages, tokens):
         mes["tokens"] = tok
         if porter:
-            mes["lemmas"] = set(Porter.stem(w) for w in mes["text"])
+            mes["lemmas"] = set(Porter.stem(norm) for norm, _ in tok)
     rows = []
     for i, (m1, m2) in enumerate(combinations(messages, 2)):
         print("Прогресс в сочетаниях: {}/{}".format(i+1,

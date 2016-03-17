@@ -141,29 +141,19 @@ def compete_models(train, test, seed = None):
     for mdl in models:
         mdl["model"].fit(X1, y1)
         y = mdl["model"].predict(X2)
-        
-        mdl["score"] = (y == y2).mean()
         res = ps.DataFrame({"y": y2, "p": y}, index=None)
-        mdl["true_pos"] = res[res["y"] == 1]["p"].mean()
-        mdl["true_neg"] = 1 - res[res["y"] == 0]["p"].mean()
+        
+        mdl["prec"] = res[res["p"] == 1]["y"].mean()
+        mdl["recall"] = res[res["y"] == 1]["p"].mean()
+        mdl["f1"] = 2/(1/mdl["prec"] + 1/mdl["recall"])
 
-        print(mdl["txt"] + ": {:.4f}/{:.4f}/{:.4f}".format(
-            mdl["score"], mdl["true_pos"], mdl["true_neg"]))
-
-    # Отсеиваем модели с откровенными "перекосами":
-    models = [value for value in models
-        if value["score"] > 0.8 and value["true_pos"] > 0.7]
+        print("{}: f1 {:.4f}, prec {:.4f}, recall {:.4f}".format(
+            mdl["txt"], mdl["f1"], mdl["prec"], mdl["recall"]))
     
-    # Выбираем лучшие модели по каждому из 4 критериев:
-    sc = max(models, key=lambda x: x["score"])
-    pos = max(models, key=lambda x: x["true_pos"])
-    neg = max(models, key=lambda x: x["true_neg"])
-    bal = max(models, key=lambda x: (x["true_pos"]+x["true_neg"])/2)
-
-    print("Лучший общий результат: {} ({})".format(sc["txt"], sc["score"]))
-    print("Лучший по определению дубликатов: {} ({})".format(pos["txt"], pos["true_pos"]))
-    print("Лучший по определению не-дубликатов: {} ({})".format(neg["txt"], neg["true_neg"]))
-    print("Лучшее среднее: {} ({}/{})".format(bal["txt"], bal["true_pos"], bal["true_neg"]))
+    # Выбираем лучшую модель по f1 score:
+    best = max(models, key=lambda x: x["f1"])
+    print("Лучшая модель: {} (f1 {:.4f}, prec {:.4f}, recall {:.4f})".format(
+        best["txt"], best["f1"], best["prec"], best["recall"]))
 
 def train_model(data, seed = None):
     '''
@@ -186,16 +176,15 @@ def train_model(data, seed = None):
     data = ps.concat([pos_data, neg_data])
     print("Размер учебной выборки: {}".format(len(data)))
 
-    #print(sorted(((ind, val) for ind, val
-    #    in data.cov()["similar"].iteritems()), key = lambda x: x[1]))
-
     # Выделить данные и значения целевой функции:
     X = data.drop(["id1", "id2", "similar"], axis=1)
     y = data["similar"]
     
     # Обучить модель:
-    model = LogisticRegression(penalty='l1', tol=0.01, random_state=seed)
+    #model = LogisticRegression(penalty='l1', tol=0.28, random_state=seed)
     #model = RandomForestClassifier(60, 'entropy', 7, random_state=seed)
+    #model = KNeighborsClassifier(28, "uniform")
+    model = SVC(C=0.1, kernel='poly', random_state=seed)
     model.fit(X, y)
     #print(X.columns, '\n', model.feature_importances_)
     return model
@@ -235,7 +224,6 @@ def validate_model(model, data, visualize):
         ]}, index=["observed 0", "observed 1"])
 
     print("Размер тестовой выборки: {}".format(len(data)))
-    print("\nОбщая точность: {}".format(score))
     print('\n', report, '\n', p_vs_o)
 
 def predict_values(model, data):
